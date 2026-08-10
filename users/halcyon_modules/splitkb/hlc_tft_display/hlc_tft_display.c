@@ -22,6 +22,7 @@
 #include "graphics/numbers/8.qgf.h"
 #include "graphics/numbers/9.qgf.h"
 #include "graphics/numbers/undef.qgf.h"
+#include "palettefx.h"
 
 static const char *caps =        "Caps";
 static const char *num =         "Num";
@@ -55,6 +56,12 @@ typedef struct {
     const char *name;
     uint8_t effect_id;    
 } rgb_map_t;
+
+typedef struct {
+    const char *name;
+    uint8_t palette_id;
+} palette_map_t;
+
 
 static const rgb_map_t rgb_animations [] = {
     {"< Back", 0},
@@ -103,19 +110,34 @@ static const rgb_map_t rgb_animations [] = {
     {"Multisplash", RGB_MATRIX_MULTISPLASH },
     {"Solid splash", RGB_MATRIX_SOLID_SPLASH },
     {"Solid multisplash", RGB_MATRIX_SOLID_MULTISPLASH }, //RGB_MATRIX_CUSTOM_MULTISPLASH_BG }
-    // {"palettefx gradient", RGB_MATRIX_CUSTOM_PALETTEFX_GRADIENT },
-    // {"palettefx flow", RGB_MATRIX_CUSTOM_PALETTEFX_FLOW },
-    // {"palettefx ripple", RGB_MATRIX_CUSTOM_PALETTEFX_RIPPLE },
-    // {"palettefx sparkle", RGB_MATRIX_CUSTOM_PALETTEFX_SPARKLE },
-    // {"palettefx vortex", RGB_MATRIX_CUSTOM_PALETTEFX_VORTEX },
-    // {"palettefx reactive", RGB_MATRIX_CUSTOM_PALETTEFX_REACTIVE }
-    // {"starlight", RGB_MATRIX_STARLIGHT },
-    // {"starlight smooth", RGB_MATRIX_STARLIGHT_SMOOTH },
-    // {"starlight dual hue", RGB_MATRIX_STARLIGHT_DUAL_HUE },
-    // {"starlight dual sat", RGB_MATRIX_STARLIGHT_DUAL_SAT },
-    // {"riverflow", RGB_MATRIX_RIVERFLOW },
-    // {"effect max", RGB_MATRIX_EFFECT_MAX }
+    {"PFX Gradient ", RGB_MATRIX_COMMUNITY_MODULE_PALETTEFX_GRADIENT },
+    {"PFX Flow ", RGB_MATRIX_COMMUNITY_MODULE_PALETTEFX_FLOW },
+    {"PFX Ripple ", RGB_MATRIX_COMMUNITY_MODULE_PALETTEFX_RIPPLE },
+    {"PFX Sparkle ", RGB_MATRIX_COMMUNITY_MODULE_PALETTEFX_SPARKLE },
+    {"PFX Vortex ", RGB_MATRIX_COMMUNITY_MODULE_PALETTEFX_VORTEX },
+    {"PFX Reactive ", RGB_MATRIX_COMMUNITY_MODULE_PALETTEFX_REACTIVE }
 };
+
+static const palette_map_t palette_items [] = {
+    {"<- Back", 0},
+    {"PFX Afterburn", PALETTEFX_AFTERBURN},
+    {"PFX Amber", PALETTEFX_AMBER},
+    {"PFX Badwolf", PALETTEFX_BADWOLF},
+    {"PFX Carnival", PALETTEFX_CARNIVAL},
+    {"PFX Classic", PALETTEFX_CLASSIC},
+    {"PFX Dracula", PALETTEFX_DRACULA},
+    {"PFX Groovy", PALETTEFX_GROOVY},
+    {"PFX Notpink", PALETTEFX_NOTPINK},
+    {"PFX Phosphor", PALETTEFX_PHOSPHOR},
+    {"PFX Polarized", PALETTEFX_POLARIZED},
+    {"PFX Rosegold", PALETTEFX_ROSEGOLD},
+    {"PFX Sport", PALETTEFX_SPORT},
+    {"PFX Synthwave", PALETTEFX_SYNTHWAVE},
+    {"PFX Thermal", PALETTEFX_THERMAL},
+    {"PFX Viridis", PALETTEFX_VIRIDIS},
+    {"PFX Watermelon", PALETTEFX_WATERMELON},
+};
+
 typedef enum {
     MENU_OFF = 0,
     MENU_MAIN,
@@ -127,7 +149,8 @@ typedef enum {
     MENU_RGB_SPEED_DIAL,
     MENU_LEFT_ANIM,
     MENU_RIGHT_ANIM,
-    MENU_DIALOG
+    MENU_DIALOG,
+    MENU_SPECIAL_SAVE_EEPROM
 } menu_state_t;
 
 typedef struct {
@@ -174,7 +197,7 @@ static const menu_item_map_t menu_items [] = {
     {"Exit", 0, MENU_MAIN, MENU_MAIN},
     {"Screen", 1, MENU_MAIN, MENU_LEFT_ANIM },
     {"RGB", 2, MENU_MAIN, MENU_RGB },
-    {"Save", 3, MENU_MAIN, MENU_MAIN }, 
+    {"Save", 3, MENU_MAIN, MENU_SPECIAL_SAVE_EEPROM }, 
     
     {"< Back", 0, MENU_RGB, MENU_MAIN},
     {"Animation", 1, MENU_RGB, MENU_RGB_ANIM},
@@ -186,8 +209,8 @@ static const menu_item_map_t menu_items [] = {
     {"Palette", 1, MENU_RGB_COLOR, MENU_RGB_COLOR_PALETTE},    
     {"Dial", 2, MENU_RGB_COLOR, MENU_RGB_COLOR_DIAL},
 
-    {"< Back", 0, MENU_RGB_COLOR_PALETTE, MENU_RGB_COLOR},
-    {"PALETTE", 1, MENU_RGB_COLOR_PALETTE, MENU_RGB_COLOR},
+    {"< Back", -1, MENU_RGB_COLOR_PALETTE, MENU_RGB_COLOR},
+
     {"DIAL", 1, MENU_RGB_COLOR_DIAL, MENU_RGB_COLOR}
 };
 
@@ -205,8 +228,10 @@ static uint32_t g_text_position_timer = 0;
 static uint8_t g_text_first_idx = 0;
 static int wait_before_scroll = 0;
 uint8_t vp_start = 0;
-uint8_t vp_end = 8; //TODO: change VP_END in favor of global maxchars
+uint8_t vp_end = 7; //TODO: change VP_END in favor of global maxchars
 uint8_t vp_index_incr = 0;
+uint8_t last_anim = 0;
+uint8_t last_hsv;
 
 HSV get_menu_color(int item_index) {
     if (item_index == g_index) {
@@ -228,13 +253,13 @@ void update_viewport(void) {
     if (g_state == MENU_RGB_ANIM) {
         array_size = ARRAY_SIZE(rgb_animations);
     } else if (g_state == MENU_RGB_COLOR_PALETTE) {
-        array_size = 0; //TODO: size of palettes
+        array_size = ARRAY_SIZE(palette_items); //TODO: size of palettes
     }
 
     if (g_index > vp_end) {
-        by_how_much = g_index - 8;
+        by_how_much = g_index - 7;
         vp_start = by_how_much;
-        vp_end = 8 + by_how_much;
+        vp_end = 7 + by_how_much;
         if (vp_end > array_size) {
             vp_end = array_size;
         }
@@ -242,7 +267,7 @@ void update_viewport(void) {
         return;
     } 
 
-    //CURRENT_INDEX IS LOWER THAN THECURRENT VIEWPORT
+    //CURRENT_INDEX IS LOWER THAN THE CURRENT VIEWPORT
     if (g_index < vp_start) {
         by_how_much = vp_start - g_index;
 
@@ -280,12 +305,14 @@ uint8_t draw_item(const char* text, int item_id, uint8_t line, bool multiline) {
     } else {
         //is the selected item
         if (is_selected) {
+            bool is_first_render = false;
             //read it the first time            
             if (g_text_position_timer == 0) {
                 g_text_position_timer = timer_read32();
-                // g_text_first_idx = 0;
-                // wait_before_scroll = 1000;
-            } else if (g_text_position_timer == -1) {
+                is_first_render = true;
+            } 
+            
+            if (g_text_position_timer == -1) {
                 //means that i have finished looking to the timer
                 return ++line;
             }
@@ -302,10 +329,10 @@ uint8_t draw_item(const char* text, int item_id, uint8_t line, bool multiline) {
                     //advance to the next horizontal char
                     g_text_first_idx++;
                 }
-            } else {
+            } else if (!is_first_render) {
                 return ++line;
-            }
-
+            } 
+            
             text += g_text_first_idx;
         }
 
@@ -319,7 +346,6 @@ uint8_t draw_item(const char* text, int item_id, uint8_t line, bool multiline) {
 
 void draw_menu(void) {
     //MAX 8 LINES
-    //its only rendered when the menu is not MENU_OFF
 
     //ignore render if there are no changes pending (index change etc.)
     if (last_state == g_state && last_g_index == g_index && g_text_position_timer == 0) {
@@ -346,51 +372,36 @@ void draw_menu(void) {
         wait_before_scroll = 1000;
     }
 
-    // int index_incr = 0;
-    //draw the "go back" element only if the start viewport is 0
-    // if (vp_start == 0) {
-    //     index_incr++;
-    //     draw_item(
-    //         g_state == MENU_MAIN ? "Exit" : "< Back",
-    //         0,
-    //         0,
-    //         false 
-    //     );
-    // }
-    
     switch (g_state) {
-        case MENU_RGB_ANIM: {
-
+        case MENU_RGB_ANIM: 
+        case MENU_RGB_COLOR_PALETTE: { 
             if (g_text_position_timer > 0 && last_g_index == g_index) {
                 //index has not changed but the timer for horizontal scroll is running
                 //redraw the selected item
 
                 //calculate the item line
-                int element_idx = (g_index - vp_start);
-
+                int element_idx = (g_index - vp_start);            
                 draw_item(
-                    rgb_animations[g_index].name,
+                    g_state == MENU_RGB_ANIM ? rgb_animations[g_index].name : palette_items[g_index].name,
                     g_index,
                     element_idx,
                     false
                 );
             } else {
                 //rendering the entire screen
-                for (int idx = vp_start, line = 0; idx < vp_end ; idx++, line++) {
+                for (int idx = vp_start, line = 0; idx <= vp_end ; idx++, line++) {
                     draw_item(
-                        rgb_animations[idx].name,
+                        g_state == MENU_RGB_ANIM ?  rgb_animations[idx].name : palette_items[idx].name,
                         idx,
                         line,
                         false
                     );
                 }
-                
             }
-
             break;
         }
         default: {  
-            int rendered_items = 1;
+            int rendered_items = 0;
             for (int i = 0; i < ARRAY_SIZE(menu_items); i++) {
                 if(menu_items[i].menu != g_state) {
                     continue;
@@ -404,18 +415,27 @@ void draw_menu(void) {
                 ); 
                  
                 rendered_items++;
-
-                // qp_drawtext_recolor(lcd_surface, 5, height, Retron27, menu_items[i].text, MENU_COLOR(menu_items[i].id), HSV_BLACK);
             }
             break;
         }
     }
-
- 
     last_state = g_state;
     last_g_index = g_index;    
 }
 
+
+void save_settings_to_eeprom(void) {
+    rgb_matrix_sethsv(
+        rgb_matrix_config.hsv.h,
+        rgb_matrix_config.hsv.s,
+        rgb_matrix_config.hsv.v
+    );
+    rgb_matrix_mode(
+        rgb_matrix_config.mode
+    );
+    rgb_matrix_set_speed(rgb_matrix_config.speed);
+    eeconfig_update_kb(rgb_matrix_config.raw);
+}
 
 //______________________________________________________________________________________________
 //______________________________________________________________________________________________
@@ -541,50 +561,66 @@ void update_grid() {
 }
 
 void display_module_menu_open(void){
+    eeconfig_read_rgb_matrix(&rgb_matrix_config);
+    last_anim = rgb_matrix_config.mode;
     menu_visible_time = timer_read32();
     g_state = MENU_MAIN;    
     g_index = 0;
 }
 
-void display_module_menu_down(void) {
+void display_module_menu_navigate(bool downward) {
     menu_visible_time = timer_read32();
-    // g_text_position_timer = timer_read32();
+    
     //get max id available for the current menu
     int max = 0;
     if (g_state == MENU_RGB_ANIM) {
-        max = ARRAY_SIZE(rgb_animations) + 1; //Forse manca l'id zero
-    } else {
+        max = ARRAY_SIZE(rgb_animations);
+    } else if (g_state == MENU_RGB_COLOR_PALETTE) {
+        max = ARRAY_SIZE(palette_items);
+    } else {        
         for (int i = 0; i < ARRAY_SIZE(menu_items); i++) {
             if(menu_items[i].menu == g_state) {
-                if (menu_items[i].id > max) {
-                    max = menu_items[i].id;
-                }
+                max++;              
             }
         }
     }
 
-    if (g_index < max) {
-        g_index++;        
+    if (downward) {
+        if ((g_index + 1) >= max) {
+            g_index = 0;
+        } else {
+            g_index++;
+        }
+    } else {
+        if (g_index == 0) { 
+            g_index = max -1;
+        } else {
+            g_index--;
+        }
+    }
+    if (g_state == MENU_RGB_ANIM) {
+        if (g_index == 0) {
+            rgb_matrix_config.mode = last_anim;
+        } else {
+            rgb_matrix_config.mode = rgb_animations[g_index].effect_id;
+        }
+        rgb_matrix_mode_noeeprom(rgb_matrix_config.mode);
+    }
+
+    if (g_state == MENU_RGB_COLOR_PALETTE) {
+        if (g_index == 0) {
+            rgb_matrix_config.hsv.h = last_hsv;
+        } else {
+            rgb_matrix_config.hsv.h = RGB_MATRIX_HUE_STEP * palette_items[g_index].palette_id;
+        }
+        rgb_matrix_sethsv_noeeprom(rgb_matrix_config.hsv.h, 255, 255);     
     }
 
     update_viewport();
-}
-
-void display_module_menu_up(void) {
-    menu_visible_time = timer_read32();
-    // g_text_position_timer = timer_read32();
-
-    if (g_index > 0) {
-        g_index--;
-    }
-    update_viewport();
-
-    g_text_first_idx = 0;
 }
 
 void display_module_menu_enter(void) {
     menu_visible_time = timer_read32();
-    // g_text_position_timer = timer_read32();
 
     //if back or exit condition
     if (g_index == 0) {
@@ -598,19 +634,51 @@ void display_module_menu_enter(void) {
     }
 
     if (g_state == MENU_RGB_ANIM) {
-        //index -1 because zero should be "GO BACK"
-        rgb_matrix_mode_noeeprom(rgb_animations[g_index -1].effect_id); 
-    } else {        
+         if (g_index == 0) {
+            //revert to last animation if i selected back
+            g_state = get_parent_menu(g_state);
+            rgb_matrix_mode_noeeprom(last_anim);
+        } else { 
+            rgb_matrix_config.mode = rgb_animations[g_index].effect_id;
+            last_anim = rgb_matrix_config.mode;
+            g_index = 0;
+            g_state = get_parent_menu(g_state);
+        }
+    } else if (g_state == MENU_RGB_COLOR_PALETTE) {
+        if (g_index == 0) {
+            //revert to last animation if i selected back
+            g_state = MENU_RGB_COLOR;
+            g_index = 0;                
+            rgb_matrix_sethsv_noeeprom(last_hsv, 255, 255);   
+        } else {                
+            last_hsv = rgb_matrix_config.hsv.h;
+            g_index = 0;
+            g_state = MENU_RGB_COLOR;
+        }
+    } else {
         for (int i = 0; i < ARRAY_SIZE(menu_items); i++) {
             if(menu_items[i].menu == g_state && menu_items[i].id == g_index) {
-                g_state = menu_items[i].dest_menu;
-                g_index = 0;
+                if (menu_items[i].dest_menu == MENU_SPECIAL_SAVE_EEPROM) {
+                    g_index = 0;
+                    save_settings_to_eeprom();
+                } else {
+                    g_state = menu_items[i].dest_menu;
+                    g_index = 0;
+                }
+
                 return;
             }        
         }
     }
-
 }
+
+void display_module_menu_back(void) {
+    g_index = 0;
+    if (g_state != MENU_MAIN) {
+        display_module_menu_enter();
+    }
+}
+
 
 void display_module_menu_close(void) {
     //cleanup and close

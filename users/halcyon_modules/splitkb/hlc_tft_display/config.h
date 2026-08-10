@@ -32,3 +32,4 @@
 
 // Timeout configuration
 #define QUANTUM_PAINTER_DISPLAY_TIMEOUT HLC_BACKLIGHT_TIMEOUT
+

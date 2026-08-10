@@ -3,11 +3,11 @@
 
 #include QMK_KEYBOARD_H
 
-#ifdef HLC_TFT_DISPLAY
+#ifdef HLC_TFT_DISPLAY 
 void display_module_menu_open(void);
-void display_module_menu_down(void);
-void display_module_menu_up(void);
+void display_module_menu_navigate(bool downward);
 void display_module_menu_enter(void);
+void display_module_menu_back(void);
 void display_module_menu_close(void);
 bool display_module_menu_is_open(void);
 #endif
@@ -81,15 +81,19 @@ bool process_record_user(uint16_t keycode, keyrecord_t *record) {
             if (display_module_menu_is_open() && layer_state_is(_NAV_FN)) {
                 switch (keycode) {
                     case KC_UP: {
-                        display_module_menu_up();
+                        display_module_menu_navigate(false);                        
                         return false;
                     }
                     case KC_DOWN: {
-                        display_module_menu_down();
+                        display_module_menu_navigate(true);
                         return false;
                     }
-                    case KC_ENT: {
+                    case KC_RIGHT: {
                         display_module_menu_enter();
+                        return false;
+                    }
+                    case KC_LEFT: {
+                        display_module_menu_back();
                         return false;
                     }
                     default: {
