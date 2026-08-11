@@ -128,7 +128,8 @@ void housekeeping_task_kb(void) {
     housekeeping_task_user();
 }
 
-report_mouse_t pointing_device_task_combined_kb(report_mouse_t left_report, report_mouse_t right_report) {
+#ifdef POINTING_DEVICE_COMBINED
+report_mouse_t pointing_device_task_combined_kb(report_mouse_t left_report, report_mouse_t right_report) {  
     // Only runs on master
     // Fixes the following bug: If master is right and master is NOT a cirque trackpad, the inputs would be inverted.
     if(module != hlc_cirque_trackpad && !is_keyboard_left()) {
@@ -139,3 +140,5 @@ report_mouse_t pointing_device_task_combined_kb(report_mouse_t left_report, repo
     }
     return pointing_device_task_combined_user(left_report, right_report);
 }
+#endif
+
