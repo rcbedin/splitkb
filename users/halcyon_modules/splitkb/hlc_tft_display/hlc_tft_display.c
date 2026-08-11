@@ -1,6 +1,7 @@
 // Copyright 2024 splitkb.com (support@splitkb.com)
 // SPDX-License-Identifier: GPL-2.0-or-later
 
+#include "config.h"
 #include "halcyon.h"
 #include "hlc_tft_display.h"
 
@@ -202,16 +203,16 @@ static const menu_item_map_t menu_items [] = {
     {"< Back", 0, MENU_RGB, MENU_MAIN},
     {"Animation", 1, MENU_RGB, MENU_RGB_ANIM},
     {"Color", 2, MENU_RGB, MENU_RGB_COLOR},
-
-    {"", -1, MENU_RGB_ANIM, MENU_RGB}, //animations array
+    {"Speed", 3, MENU_RGB, MENU_RGB_SPEED_DIAL},
 
     {"< Back", 0, MENU_RGB_COLOR, MENU_RGB},
-    {"Palette", 1, MENU_RGB_COLOR, MENU_RGB_COLOR_PALETTE},    
-    {"Dial", 2, MENU_RGB_COLOR, MENU_RGB_COLOR_DIAL},
+    {"Palette", 1, MENU_RGB_COLOR, MENU_RGB_COLOR_PALETTE},
+    {"Hue", 2, MENU_RGB_COLOR, MENU_RGB_COLOR_DIAL},
+    {"Sat.", 3, MENU_RGB_COLOR, MENU_RGB_COLOR_DIAL},
+    {"Bright.", 4, MENU_RGB_COLOR, MENU_RGB_COLOR_DIAL},
+    
 
-    {"< Back", -1, MENU_RGB_COLOR_PALETTE, MENU_RGB_COLOR},
-
-    {"DIAL", 1, MENU_RGB_COLOR_DIAL, MENU_RGB_COLOR}
+    {"Speed:.", 1, MENU_RGB_SPEED_DIAL, MENU_RGB}
 };
 
 //______________________________________________________________________________________________
@@ -232,6 +233,7 @@ uint8_t vp_end = 7; //TODO: change VP_END in favor of global maxchars
 uint8_t vp_index_incr = 0;
 uint8_t last_anim = 0;
 uint8_t last_hsv;
+bool redraw_dial = false;
 
 HSV get_menu_color(int item_index) {
     if (item_index == g_index) {
@@ -344,11 +346,63 @@ uint8_t draw_item(const char* text, int item_id, uint8_t line, bool multiline) {
     return ++line;
 }
 
+
+void draw_progressbar(uint8_t line, int value, int max_value) {
+     if (max_value <= 0) {
+        return;
+    }
+
+    // Clamp value.
+    if (value < 0) {
+        value = 0;
+    }
+
+    if (value > max_value) {
+        value = max_value;
+    }
+
+    uint16_t x1 = 2;
+    uint16_t x2 = LCD_WIDTH - 2;
+
+    uint16_t y1 = line * Retron27->line_height;
+    uint16_t y2 = y1 + Retron27->line_height - 1;
+
+    uint16_t width = x2 - x1 + 1;
+
+    // Calculate how many pixels should be filled.
+    uint16_t filled_width =
+        ((uint32_t)value * width) / max_value;
+
+    // Clear/full background.
+    qp_rect(
+        lcd_surface,
+        x1,
+        y1,
+        x2,
+        y2,
+        HSV_BLACK,
+        true
+    );
+
+    // Draw filled portion.
+    if (filled_width > 0) {
+        qp_rect(
+            lcd_surface,
+            x1,
+            y1,
+            x1 + filled_width - 1,
+            y2,
+            HSV_CAPS_ON,
+            true
+        );
+    }
+}
+
 void draw_menu(void) {
     //MAX 8 LINES
 
     //ignore render if there are no changes pending (index change etc.)
-    if (last_state == g_state && last_g_index == g_index && g_text_position_timer == 0) {
+    if (!redraw_dial && last_state == g_state && last_g_index == g_index && g_text_position_timer == 0 ) {
         return;
     }   
 
@@ -398,6 +452,48 @@ void draw_menu(void) {
                     );
                 }
             }
+            break;
+        }
+        case MENU_RGB_COLOR_DIAL: {
+            char text[9];
+            uint8_t value = 0;
+
+            switch(g_index) {
+                case 2: {
+                    strcpy(text, "Hue:");
+                    value = rgb_matrix_config.hsv.h;
+                    break;
+                }
+                case 3: {
+                    strcpy(text, "Sat.:");
+                    value = rgb_matrix_config.hsv.s;                    
+                    break;
+                }
+                case 4: {
+                    strcpy(text, "Bright.:");
+                    value = rgb_matrix_config.hsv.v;                    
+                    break;
+                }
+            }
+
+            if (!redraw_dial) {
+                draw_item(text, g_index, 0, false);
+            }
+
+            char textvalue[9];
+            snprintf(textvalue, sizeof(textvalue), "%*u", 8, value);
+
+            draw_progressbar(2, value, 255);
+            draw_item(textvalue, g_index, 4, false);
+            
+            redraw_dial = false;
+
+            break;
+        }
+        case MENU_RGB_SPEED_DIAL: { 
+            // line = draw_line("Anim. spd:", false, line);
+                // snprintf(buf, sizeof(buf), "%*u",  w, rgb_matrix_config.speed);
+                // draw_line(buf, false, line);
             break;
         }
         default: {  
@@ -577,6 +673,8 @@ void display_module_menu_navigate(bool downward) {
         max = ARRAY_SIZE(rgb_animations);
     } else if (g_state == MENU_RGB_COLOR_PALETTE) {
         max = ARRAY_SIZE(palette_items);
+    } else if (g_state == MENU_RGB_COLOR_DIAL || g_state == MENU_RGB_SPEED_DIAL) {
+        max = 255;
     } else {        
         for (int i = 0; i < ARRAY_SIZE(menu_items); i++) {
             if(menu_items[i].menu == g_state) {
@@ -584,39 +682,84 @@ void display_module_menu_navigate(bool downward) {
             }
         }
     }
-
-    if (downward) {
-        if ((g_index + 1) >= max) {
-            g_index = 0;
-        } else {
-            g_index++;
+    if (g_state == MENU_RGB_COLOR_DIAL ) {
+        switch(g_index) {
+            case 2:          
+                if (!downward) {
+                    if (rgb_matrix_config.hsv.h < max) {
+                        rgb_matrix_config.hsv.h += 1;
+                    }
+                } else if (rgb_matrix_config.hsv.h > 0) {
+                    rgb_matrix_config.hsv.h -= 1;
+                }
+                break;
+            case 3: 
+                if (!downward) {
+                    if (rgb_matrix_config.hsv.s < max) {
+                        rgb_matrix_config.hsv.s += 1;
+                    }
+                } else if (rgb_matrix_config.hsv.s > 0) {
+                    rgb_matrix_config.hsv.s -= 1;
+                }
+                break;
+            case 4: 
+                max = 101;
+                if (!downward) {
+                    if (rgb_matrix_config.hsv.v < max) {
+                        rgb_matrix_config.hsv.v += 1;
+                    }
+                } else if (rgb_matrix_config.hsv.v > 0) {
+                    rgb_matrix_config.hsv.v -= 1;
+                }
+                break;
         }
+        redraw_dial = true;
+        rgb_matrix_sethsv_noeeprom(rgb_matrix_config.hsv.h, rgb_matrix_config.hsv.s, rgb_matrix_config.hsv.v);     
+    } else if (g_state == MENU_RGB_SPEED_DIAL) {
+        //moves the dial
+        if (downward) {
+            if (rgb_matrix_config.speed < max) {
+                rgb_matrix_config.speed += 1;
+            }
+        } else if (rgb_matrix_config.speed > 0) {
+            rgb_matrix_config.speed -= 1;
+        }        
+        rgb_matrix_set_speed_noeeprom(rgb_matrix_config.speed);
+        redraw_dial = true;
     } else {
-        if (g_index == 0) { 
-            g_index = max -1;
+        if (downward) {
+            if ((g_index + 1) >= max) {
+                g_index = 0;
+            } else {
+                g_index++;
+            }
         } else {
-            g_index--;
+            if (g_index == 0) { 
+                g_index = max -1;
+            } else {
+                g_index--;
+            }
         }
-    }
-    if (g_state == MENU_RGB_ANIM) {
-        if (g_index == 0) {
-            rgb_matrix_config.mode = last_anim;
-        } else {
-            rgb_matrix_config.mode = rgb_animations[g_index].effect_id;
+        if (g_state == MENU_RGB_ANIM) {
+            if (g_index == 0) {
+                rgb_matrix_config.mode = last_anim;
+            } else {
+                rgb_matrix_config.mode = rgb_animations[g_index].effect_id;
+            }
+            rgb_matrix_mode_noeeprom(rgb_matrix_config.mode);
         }
-        rgb_matrix_mode_noeeprom(rgb_matrix_config.mode);
-    }
 
-    if (g_state == MENU_RGB_COLOR_PALETTE) {
-        if (g_index == 0) {
-            rgb_matrix_config.hsv.h = last_hsv;
-        } else {
-            rgb_matrix_config.hsv.h = RGB_MATRIX_HUE_STEP * palette_items[g_index].palette_id;
+        if (g_state == MENU_RGB_COLOR_PALETTE) {
+            if (g_index == 0) {
+                rgb_matrix_config.hsv.h = last_hsv;
+            } else {
+                rgb_matrix_config.hsv.h = RGB_MATRIX_HUE_STEP * palette_items[g_index].palette_id;
+            }
+            rgb_matrix_sethsv_noeeprom(rgb_matrix_config.hsv.h, 255, 255);     
         }
-        rgb_matrix_sethsv_noeeprom(rgb_matrix_config.hsv.h, 255, 255);     
-    }
 
-    update_viewport();
+        update_viewport();
+    }
 }
 
 void display_module_menu_enter(void) {
@@ -647,14 +790,17 @@ void display_module_menu_enter(void) {
     } else if (g_state == MENU_RGB_COLOR_PALETTE) {
         if (g_index == 0) {
             //revert to last animation if i selected back
-            g_state = MENU_RGB_COLOR;
+            g_state = get_parent_menu(MENU_RGB_COLOR_PALETTE);
             g_index = 0;                
             rgb_matrix_sethsv_noeeprom(last_hsv, 255, 255);   
         } else {                
             last_hsv = rgb_matrix_config.hsv.h;
             g_index = 0;
-            g_state = MENU_RGB_COLOR;
+            g_state = get_parent_menu(MENU_RGB_COLOR_PALETTE);
         }
+    } else if (g_state == MENU_RGB_COLOR_DIAL) {
+        rgb_matrix_mode_noeeprom(last_anim);
+        g_state = get_parent_menu(MENU_RGB_COLOR_PALETTE);        
     } else {
         for (int i = 0; i < ARRAY_SIZE(menu_items); i++) {
             if(menu_items[i].menu == g_state && menu_items[i].id == g_index) {
@@ -663,9 +809,13 @@ void display_module_menu_enter(void) {
                     save_settings_to_eeprom();
                 } else {
                     g_state = menu_items[i].dest_menu;
-                    g_index = 0;
-                }
 
+                    if (g_state != MENU_RGB_COLOR_DIAL && g_state != MENU_RGB_SPEED_DIAL) {
+                        //dont reset if going into the dials
+                        g_index = 0;
+                        redraw_dial = false;
+                    }
+                }
                 return;
             }        
         }

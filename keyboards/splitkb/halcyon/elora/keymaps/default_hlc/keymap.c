@@ -48,52 +48,46 @@ enum combo_events {
     GOTO_BOOT_RIGHT,
 };
 
-// const uint16_t PROGMEM goto_boot_combo_left[] = {
-//     KC_ESC,
-//     KC_LSFT,
-//     COMBO_END
-// };
+const uint16_t PROGMEM goto_boot_combo_left[] = {
+    KC_ESC,
+    KC_LSFT,
+    COMBO_END
+};
 
-// const uint16_t PROGMEM goto_boot_combo_right[] = {
-//     KC_BSPC,
-//     KC_INSERT,
-//     COMBO_END
-// };
+const uint16_t PROGMEM goto_boot_combo_right[] = {
+    KC_BSPC,
+    KC_INSERT,
+    COMBO_END
+};
 
-// combo_t key_combos[] = {
-//     [GOTO_BOOT_LEFT] = COMBO_ACTION(goto_boot_combo_left),
-//     [GOTO_BOOT_RIGHT] = COMBO_ACTION(goto_boot_combo_right),
-// };
+combo_t key_combos[] = {
+    [GOTO_BOOT_LEFT] = COMBO_ACTION(goto_boot_combo_left),
+    [GOTO_BOOT_RIGHT] = COMBO_ACTION(goto_boot_combo_right),
+};
 
-// void process_combo_event(uint16_t combo_index, bool pressed) {
-//     if (
-//         combo_index == GOTO_BOOT_LEFT &&
-//         pressed &&
-//         layer_state_is(_NAV_FN)
-//     ) {
-//         //send boot command to the left zkeyboard
-//         reset_keyboard();
-//     } 
+void process_combo_event(uint16_t combo_index, bool pressed) {
+    if (
+        combo_index == GOTO_BOOT_LEFT &&
+        pressed &&
+        layer_state_is(_NAV_FN)
+    ) {
+        //send boot command to the left zkeyboard
+        reset_keyboard();
+    } 
 
-//     if (
-//         combo_index == GOTO_BOOT_RIGHT &&
-//         pressed &&
-//         layer_state_is(_NUMPAD)
-//     ) {
-//         //send boot command to the left zkeyboard
-//         reset_keyboard();
-//     } 
-// }
+    if (
+        combo_index == GOTO_BOOT_RIGHT &&
+        pressed &&
+        layer_state_is(_NUMPAD)
+    ) {
+        //send boot command to the left zkeyboard
+        reset_keyboard();
+    } 
+}
 
 bool process_record_user(uint16_t keycode, keyrecord_t *record) {
 
     #ifdef HLC_TFT_DISPLAY
-     uprintf("key event");
-
-     uprintf(
-    "pointing status: %d\n",
-    pointing_device_get_status()
-);
 
         if (record->event.pressed) {
             if (keycode == KC_F24 && layer_state_is(_NAV_FN)) {

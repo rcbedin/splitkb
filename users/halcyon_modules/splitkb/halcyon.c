@@ -142,3 +142,41 @@ report_mouse_t pointing_device_task_combined_kb(report_mouse_t left_report, repo
 }
 #endif
 
+#ifdef POINTING_DEVICE_RIGHT 
+
+static uint32_t touch_start_timer = 0;
+static bool touch_started = false;
+
+#define TAP_DEADZONE_TIME 80
+#define TAP_DEADZONE      1
+
+report_mouse_t pointing_device_task_user(report_mouse_t report) {
+    bool moving = report.x || report.y;
+
+    if (moving && !touch_started) {
+        touch_started = true;
+        touch_start_timer = timer_read32();
+    }
+
+    if (touch_started &&
+        timer_elapsed32(touch_start_timer) < TAP_DEADZONE_TIME) {
+
+        if (report.x >= -TAP_DEADZONE &&
+            report.x <= TAP_DEADZONE) {
+            report.x = 0;
+        }
+
+        if (report.y >= -TAP_DEADZONE &&
+            report.y <= TAP_DEADZONE) {
+            report.y = 0;
+        }
+    }
+
+    if (!moving) {
+        touch_started = false;
+    }
+
+    return report;
+}
+
+#endif
