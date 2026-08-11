@@ -45,6 +45,7 @@ enum layers {
 
 enum combo_events {
     GOTO_BOOT_LEFT,
+    GOTO_BOOT_RIGHT,
 };
 
 const uint16_t PROGMEM goto_boot_combo_left[] = {
@@ -53,8 +54,15 @@ const uint16_t PROGMEM goto_boot_combo_left[] = {
     COMBO_END
 };
 
+const uint16_t PROGMEM goto_boot_combo_right[] = {
+    KC_BSPC,
+    KC_INSERT,
+    COMBO_END
+};
+
 combo_t key_combos[] = {
     [GOTO_BOOT_LEFT] = COMBO_ACTION(goto_boot_combo_left),
+    [GOTO_BOOT_RHT] = COMBO_ACTION(goto_boot_combo_right),
 };
 
 void process_combo_event(uint16_t combo_index, bool pressed) {
@@ -62,6 +70,15 @@ void process_combo_event(uint16_t combo_index, bool pressed) {
         combo_index == GOTO_BOOT_LEFT &&
         pressed &&
         layer_state_is(_NAV_FN)
+    ) {
+        //send boot command to the left zkeyboard
+        reset_keyboard();
+    } 
+
+    if (
+        combo_index == GOTO_BOOT_RIGHT &&
+        pressed &&
+        layer_state_is(_NUMPAD)
     ) {
         //send boot command to the left zkeyboard
         reset_keyboard();
@@ -321,20 +338,20 @@ const uint16_t PROGMEM encoder_map[][NUM_ENCODERS][NUM_DIRECTIONS] = {
 #if defined (HALCYON_ENABLE)
 const uint16_t left_halcyon_buttons[10][5] = {
     [_QWERTY] =     { KC_MUTE, _______, _______, _______, _______ },
-    [_DVORAK] =     { _______, _______, _______, _______, _______ },
-    [_COLEMAK_DH] = { _______, _______, _______, _______, _______ },
     [_NAV_FN] =        { _______, _______, _______, _______, _______ },
     [_NUMPAD] =        { _______, _______, _______, _______, _______ },
+    [_DVORAK] =     { _______, _______, _______, _______, _______ },
+    [_COLEMAK_DH] = { _______, _______, _______, _______, _______ },
     [_FUNCTION] =   { _______, _______, _______, _______, _______ },
     [_ADJUST] =     { _______, _______, _______, _______, _______ }
 };
 
 const uint16_t right_halcyon_buttons[10][5] = {
     [_QWERTY] =     { KC_MUTE, _______, _______, _______, _______ },
-    [_DVORAK] =     { _______, _______, _______, _______, _______ },
-    [_COLEMAK_DH] = { _______, _______, _______, _______, _______ },
     [_NAV_FN] =        { _______, _______, _______, _______, _______ },
     [_NUMPAD] =        { _______, _______, _______, _______, _______ },
+    [_DVORAK] =     { _______, _______, _______, _______, _______ },
+    [_COLEMAK_DH] = { _______, _______, _______, _______, _______ },
     [_FUNCTION] =   { _______, _______, _______, _______, _______ },
     [_ADJUST] =     { _______, _______, _______, _______, _______ }
 };
